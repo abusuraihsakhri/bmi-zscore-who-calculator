@@ -1,0 +1,3 @@
+patient_id,weight_kg,height_cm,age_months,sex
+C001,15.2,95,36,M
+C002,12.1,85,24,F
