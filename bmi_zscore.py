@@ -321,50 +321,180 @@ def process_csv(input_path: str, output_path: str) -> list[BMIResult]:
 
     with open(input_path, "r", newline="", encoding="utf-8-sig") as f_in:
         reader = csv.DictReader(f_in)
-        missing = set(["patient_id", "weight_kg", "height_m"]) - set(reader.fieldnames or [])
-        if missing:
-            raise ValueError(f"Input CSV is missing required columns: {sorted(missing)}")
+        fieldnames = [fn.strip() for fn in (reader.fieldnames or [])]
+        field_map = {fn.lower().replace(" ", "_"): fn for fn in fieldnames}
 
-        for row_num, row in enumerate(reader, start=2):
-            patient_id = (row.get("patient_id") or "").strip() or f"row{row_num}"
-            row_warnings: list[str] = []
+        # Check required fields with flexible naming
+        has_weight = "weight_kg" in field_map or "weight" in field_map
+        has_height = "height_m" in field_map or "height_cm" in field_map or "height" in field_map or "length_cm" in field_map
 
+        if not has_weight or not has_height:
+            missing = []
+            if not has_weight:
+                missing.append("weight_kg")
+            if not has_height:
+                missing.append("height_m (or height_cm)")
+            raise ValueError(f"Input CSV is missing required columns: {missing}")
+
+        rows_data = list(reader)
+
+    # Check if input had custom/rich pediatric columns to preserve or enhance
+    has_rich_columns = any(k in field_map for k in ["height_cm", "age_days", "l_param", "m_param", "s_param", "nutritional_classification"])
+
+    for row_num, row in enumerate(rows_data, start=2):
+        # Normalize key access
+        r = {k.lower().strip().replace(" ", "_"): v for k, v in row.items() if k}
+
+        patient_id = (r.get("patient_id") or r.get("id") or "").strip() or f"row{row_num}"
+        row_warnings: list[str] = []
+
+        # Parse weight
+        weight_kg_val = None
+        for w_key in ["weight_kg", "weight"]:
+            if w_key in r and r[w_key].strip():
+                try:
+                    weight_kg_val = float(r[w_key])
+                    break
+                except ValueError:
+                    pass
+
+        # Parse height
+        height_m_val = None
+        if "height_m" in r and r["height_m"].strip():
             try:
-                weight_kg = float(row["weight_kg"])
-                height_m = float(row["height_m"])
-            except (KeyError, ValueError, TypeError) as exc:
-                row_warnings.append(f"Could not parse required fields: {exc}")
-                results.append(BMIResult(patient_id=patient_id, weight_kg=0, height_m=0, warnings=row_warnings))
-                continue
+                height_m_val = float(r["height_m"])
+            except ValueError:
+                pass
+        elif "height_cm" in r and r["height_cm"].strip():
+            try:
+                height_m_val = float(r["height_cm"]) / 100.0
+            except ValueError:
+                pass
+        elif "length_cm" in r and r["length_cm"].strip():
+            try:
+                height_m_val = float(r["length_cm"]) / 100.0
+            except ValueError:
+                pass
+        elif "height" in r and r["height"].strip():
+            try:
+                val = float(r["height"])
+                height_m_val = val / 100.0 if val > 3.0 else val
+            except ValueError:
+                pass
 
-            age_str = (row.get("age_months") or "").strip()
-            age_months = float(age_str) if age_str else None
-            sex = (row.get("sex") or "").strip().upper() or None
+        if weight_kg_val is None or height_m_val is None:
+            row_warnings.append("Could not parse required fields: weight/height")
+            results.append(BMIResult(patient_id=patient_id, weight_kg=0, height_m=0, warnings=row_warnings))
+            continue
 
-            result = calculate_patient(
-                patient_id=patient_id, weight_kg=weight_kg, height_m=height_m,
-                age_months=age_months, sex=sex,
-            )
-            result.warnings = row_warnings + result.warnings
-            results.append(result)
+        # Parse age
+        age_months = None
+        if "age_months" in r and r["age_months"].strip():
+            try:
+                age_months = float(r["age_months"])
+            except ValueError:
+                pass
+        elif "age_days" in r and r["age_days"].strip():
+            try:
+                age_months = round(float(r["age_days"]) / 30.4375, 2)
+            except ValueError:
+                pass
+        elif "age" in r and r["age"].strip():
+            try:
+                age_months = float(r["age"])
+            except ValueError:
+                pass
 
-    with open(output_path, "w", newline="", encoding="utf-8") as f_out:
-        writer = csv.DictWriter(f_out, fieldnames=CSV_OUTPUT_FIELDS)
-        writer.writeheader()
-        for r in results:
-            writer.writerow({
-                "patient_id": r.patient_id,
-                "weight_kg": r.weight_kg,
-                "height_m": r.height_m,
-                "age_months": r.age_months if r.age_months is not None else "",
-                "sex": r.sex or "",
-                "bmi": _fmt(r.bmi),
-                "adult_category": r.adult_category or "",
-                "z_score": _fmt(r.z_score),
-                "percentile": _fmt(r.percentile),
-                "child_category": r.child_category or "",
-                "warnings": " | ".join(r.warnings),
-            })
+        sex_val = (r.get("sex") or r.get("gender") or "").strip().upper() or None
+        if sex_val:
+            if sex_val.startswith("M"):
+                sex_val = "M"
+            elif sex_val.startswith("F"):
+                sex_val = "F"
+
+        result = calculate_patient(
+            patient_id=patient_id, weight_kg=weight_kg_val, height_m=height_m_val,
+            age_months=age_months, sex=sex_val,
+        )
+        result.warnings = row_warnings + result.warnings
+        results.append(result)
+
+    # Determine output columns: standard or extended based on input format
+    if has_rich_columns:
+        output_fields = [
+            "patient_id", "age_months", "age_days", "sex", "height_cm", "weight_kg",
+            "bmi", "l_param", "m_param", "s_param", "z_score", "percentile",
+            "nutritional_classification", "warnings",
+        ]
+        with open(output_path, "w", newline="", encoding="utf-8") as f_out:
+            writer = csv.DictWriter(f_out, fieldnames=output_fields)
+            writer.writeheader()
+            for r, orig_row in zip(results, rows_data):
+                orig_r = {k.lower().strip().replace(" ", "_"): v for k, v in orig_row.items() if k}
+                h_cm = f"{r.height_m * 100.0:.1f}" if r.height_m else orig_r.get("height_cm", "")
+                age_d = orig_r.get("age_days", "")
+                if not age_d and r.age_months is not None:
+                    age_d = str(int(round(r.age_months * 30.4375)))
+
+                # LMS lookup if child
+                l_str, m_str, s_str = "", "", ""
+                if r.is_child and r.age_months is not None and r.sex:
+                    tbl = WHO_BMI_LMS_MALE if r.sex == "M" else WHO_BMI_LMS_FEMALE
+                    L, M, S = _interpolate_lms(r.age_months, tbl)
+                    l_str, m_str, s_str = f"{L:.2f}", f"{M:.2f}", f"{S:.4f}"
+
+                # Classification label
+                class_label = ""
+                if r.z_score is not None and r.is_child:
+                    if r.z_score < -3.0:
+                        class_label = "severe wasting"
+                    elif r.z_score < -2.0:
+                        class_label = "wasted"
+                    elif r.z_score <= 1.0:
+                        class_label = "normal"
+                    elif r.z_score <= 2.0:
+                        class_label = "risk of overweight"
+                    elif r.z_score <= 3.0:
+                        class_label = "overweight"
+                    else:
+                        class_label = "obese"
+                elif r.adult_category:
+                    class_label = r.adult_category
+
+                writer.writerow({
+                    "patient_id": r.patient_id,
+                    "age_months": f"{r.age_months:.1f}" if r.age_months is not None else "",
+                    "age_days": age_d,
+                    "sex": r.sex or "",
+                    "height_cm": h_cm,
+                    "weight_kg": f"{r.weight_kg:.1f}" if r.weight_kg else "",
+                    "bmi": _fmt(r.bmi),
+                    "l_param": l_str,
+                    "m_param": m_str,
+                    "s_param": s_str,
+                    "z_score": _fmt(r.z_score),
+                    "percentile": _fmt(r.percentile),
+                    "nutritional_classification": class_label,
+                    "warnings": " | ".join(r.warnings),
+                })
+    else:
+        with open(output_path, "w", newline="", encoding="utf-8") as f_out:
+            writer = csv.DictWriter(f_out, fieldnames=CSV_OUTPUT_FIELDS)
+            writer.writeheader()
+            for r in results:
+                writer.writerow({
+                    "patient_id": r.patient_id,
+                    "weight_kg": r.weight_kg,
+                    "height_m": r.height_m,
+                    "age_months": r.age_months if r.age_months is not None else "",
+                    "sex": r.sex or "",
+                    "bmi": _fmt(r.bmi),
+                    "adult_category": r.adult_category or "",
+                    "z_score": _fmt(r.z_score),
+                    "percentile": _fmt(r.percentile),
+                    "child_category": r.child_category or "",
+                    "warnings": " | ".join(r.warnings),
+                })
 
     return results
 
@@ -393,8 +523,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     single.add_argument("--sex", default=None, choices=["M", "F", "m", "f"], help="Sex (for child Z-score)")
 
     batch = subparsers.add_parser("batch", help="Batch CSV processing")
-    batch.add_argument("--input", required=True, help="Input CSV path")
-    batch.add_argument("--output", required=True, help="Output CSV path")
+    batch.add_argument("-i", "--input", required=True, help="Input CSV path")
+    batch.add_argument("-o", "--output", required=True, help="Output CSV path")
 
     return parser
 

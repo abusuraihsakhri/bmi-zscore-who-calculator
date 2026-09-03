@@ -1,3 +1,11 @@
-patient_id,weight_kg,height_cm,age_months,sex
-C001,15.2,95,36,M
-C002,12.1,85,24,F
+patient_id,age_months,age_days,sex,height_cm,weight_kg,bmi,l_param,m_param,s_param,z_score,percentile,nutritional_classification
+P001,36,1095,male,96.0,9.8,10.63,-1.10,15.40,0.0780,-5.87,0.0,severe wasting (<-3SD)
+P002,24,730,female,86.0,9.7,13.12,-0.90,15.40,0.0810,-2.13,1.7,wasted (<-2SD)
+P003,12,365,male,76.0,9.6,16.62,-0.80,16.40,0.0820,0.16,56.4,normal (-2SD to +1SD)
+P004,48,1461,female,102.0,15.8,15.19,-1.10,15.10,0.0810,0.07,52.8,normal (-2SD to +1SD)
+P005,36,1095,male,96.0,16.5,17.90,-1.10,15.40,0.0780,1.78,96.2,risk of overweight (>+1SD)
+P006,60,1826,female,110.0,23.0,19.01,-1.20,15.20,0.0830,2.36,99.1,overweight (>+2SD)
+P007,48,1461,male,103.0,23.0,21.68,-1.20,15.30,0.0790,3.61,100.0,obese (>+3SD)
+P008,72,2191,female,115.0,15.0,11.34,-1.30,15.30,0.0860,-4.26,0.0,severe wasting (<-3SD)
+P009,120,3652,male,138.0,31.5,16.54,-1.50,16.80,0.0990,-0.16,43.6,normal (-2SD to +1SD)
+P010,144,4383,female,150.0,58.0,25.78,-0.80,18.40,0.1180,2.50,99.4,overweight (>+2SD)
