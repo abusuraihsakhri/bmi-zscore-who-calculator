@@ -152,13 +152,26 @@ def calculate_patient(
         warnings.append(str(exc))
         return result
 
-    if age_months is None and age_days is not None:
+    if age_days is not None:
         try:
             age_days_value = float(age_days)
             if not math.isfinite(age_days_value) or age_days_value < 0:
                 raise ValueError("age_days must be a finite non-negative number")
-            age_months = age_days_value / DAYS_PER_MONTH
-            result.age_months = age_months
+            derived_months = age_days_value / DAYS_PER_MONTH
+            if derived_months < 60.0:
+                if (
+                    age_months is not None
+                    and abs(float(age_months) - derived_months) > 0.55
+                ):
+                    warnings.append(
+                        "age_months and age_days differ materially; exact age_days "
+                        "was used for the under-5 WHO reference."
+                    )
+                age_months = derived_months
+                result.age_months = age_months
+            elif age_months is None:
+                age_months = derived_months
+                result.age_months = age_months
         except (TypeError, ValueError) as exc:
             warnings.append(str(exc))
             return result
