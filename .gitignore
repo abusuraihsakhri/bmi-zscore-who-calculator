@@ -72,3 +72,4 @@ results.csv
 output.csv
 out_smoke.csv
 *.tmp
+\n# Static site build\n_site/\n

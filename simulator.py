@@ -1,67 +1,69 @@
-"""
-Distributed Component High-Throughput Traffic & Stress Testing Simulator for Bmi Zscore Who Calculator.
-"""
-import time
+#!/usr/bin/env python3
+"""Deterministic stress/smoke simulator for the BMI calculator."""
+
+from __future__ import annotations
+
+import argparse
 import random
-import sys
-from agents.models import SystemTaskPayload
-from agents.supervisor import SystemSupervisor
-from agents.base import PHIGuard, SecurityException, AuditLogger
+import time
 
-def run_simulation(iterations: int = 100):
-    print(f"Starting Distributed Component Simulation on Bmi Zscore Who Calculator ({iterations} tasks)...")
-    supervisor = SystemSupervisor(model_provider="mock")
-    start_time = time.time()
-    nominal_count = 0
-    elevated_count = 0
-    critical_count = 0
-    phi_blocked_count = 0
+from bmi_zscore import calculate_patient
 
-    for i in range(iterations):
-        # 1. Normal / Elevated / Critical payload distribution
-        p_val = random.uniform(5.0, 40.0)
-        s_val = random.uniform(1.0, 20.0)
-        is_crit = random.random() < 0.15
-        descriptor = random.choice(["NOMINAL", "DISCORDANT_ANOMALY", "MUTANT_VARIANT", "OPTIMAL"])
 
-        payload = SystemTaskPayload(
-            task_id=f"SIM-{i+1:04d}",
-            target_identifier=f"SPECIMEN-{random.randint(100, 999)}",
-            primary_metric=round(p_val, 2),
-            secondary_metric=round(s_val, 2),
-            status_descriptor=descriptor,
-            is_critical_flag=is_crit
-        )
+def run_simulation(iterations: int = 1000, seed: int = 2026) -> dict[str, float]:
+    """Run randomized valid calculations through the current core engine."""
+    if iterations <= 0:
+        raise ValueError("iterations must be positive")
+    rng = random.Random(seed)
+    start = time.perf_counter()
+    pediatric = adult = warnings = 0
 
-        dossier = supervisor.process_task(payload)
-        if dossier.overall_urgency.value == "CRITICAL_STAT_PANIC":
-            critical_count += 1
-        elif dossier.overall_urgency.value == "ELEVATED_RISK":
-            elevated_count += 1
+    for index in range(iterations):
+        if index % 4:
+            age_months = rng.uniform(0.0, 228.9)
+            sex = rng.choice(("M", "F"))
+            height_m = rng.uniform(0.50, 1.90)
+            weight_kg = rng.uniform(3.0, 100.0)
         else:
-            nominal_count += 1
+            age_months = rng.uniform(240.0, 900.0)
+            sex = None
+            height_m = rng.uniform(1.40, 2.05)
+            weight_kg = rng.uniform(40.0, 160.0)
 
-        # 2. Adversarial PHI test injection (every 25 iterations)
-        if (i + 1) % 25 == 0:
-            try:
-                PHIGuard.assert_no_phi(f"Patient John Doe MRN-{random.randint(100000, 999999)} test")
-            except SecurityException:
-                phi_blocked_count += 1
+        result = calculate_patient(
+            patient_id=f"SIM-{index + 1:05d}",
+            weight_kg=weight_kg,
+            height_m=height_m,
+            age_months=age_months,
+            sex=sex,
+        )
+        if result.is_child:
+            pediatric += 1
+        else:
+            adult += 1
+        warnings += len(result.warnings)
 
-    elapsed = time.time() - start_time
-    print("\n" + "=" * 70)
-    print(f"  SIMULATION SUMMARY FOR BMI ZSCORE WHO CALCULATOR")
-    print("=" * 70)
-    print(f"  Total Tasks Processed:     {iterations}")
-    print(f"  Elapsed Time:              {elapsed:.3f} seconds ({iterations/max(0.001, elapsed):.1f} tasks/sec)")
-    print(f"  Routine Outcomes:          {nominal_count} ({nominal_count/iterations*100:.1f}%)")
-    print(f"  Elevated Risk Outcomes:    {elevated_count} ({elevated_count/iterations*100:.1f}%)")
-    print(f"  Critical Interventions:    {critical_count} ({critical_count/iterations*100:.1f}%)")
-    print(f"  Adversarial PHI Intercepts:{phi_blocked_count} (100% Interception Rate)")
-    print(f"  HMAC Audit Ledger Blocks:  {len(AuditLogger.get_trail())}")
-    print(f"  HMAC Cryptographic Check:  {AuditLogger.verify_integrity()}")
-    print("=" * 70)
+    elapsed = time.perf_counter() - start
+    return {
+        "iterations": iterations,
+        "pediatric": pediatric,
+        "adult": adult,
+        "warnings": warnings,
+        "elapsed_seconds": round(elapsed, 4),
+        "calculations_per_second": round(iterations / max(elapsed, 1e-9), 1),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("iterations", nargs="?", type=int, default=1000)
+    parser.add_argument("--seed", type=int, default=2026)
+    args = parser.parse_args()
+    summary = run_simulation(args.iterations, args.seed)
+    for key, value in summary.items():
+        print(f"{key}: {value}")
+    return 0
+
 
 if __name__ == "__main__":
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 100
-    run_simulation(n)
+    raise SystemExit(main())

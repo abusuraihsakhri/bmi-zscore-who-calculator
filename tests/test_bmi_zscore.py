@@ -1,274 +1,188 @@
-"""Tests for bmi_zscore.py -- plain assert statements, stdlib only.
-
-Run with: python test_bmi_zscore.py
-"""
+"""Tests for the BMI calculator core."""
 
 import csv
 import math
 import os
 import tempfile
 
+import pytest
+
 import bmi_zscore as bmi
+from who_reference import reference_for_age
 
-
-# ---------------------------------------------------------------------------
-# BMI Calculation
-# ---------------------------------------------------------------------------
 
 def test_bmi_basic():
-    """70kg / (1.75m)^2 = 70 / 3.0625 = 22.86."""
-    result = bmi.calculate_bmi(70, 1.75)
-    assert math.isclose(result, 22.86, abs_tol=0.01), result
+    assert math.isclose(bmi.calculate_bmi(70, 1.75), 22.8571, rel_tol=1e-4)
 
 
-def test_bmi_known_value():
-    """80kg / (1.80m)^2 = 80 / 3.24 = 24.69."""
-    result = bmi.calculate_bmi(80, 1.80)
-    assert math.isclose(result, 24.69, abs_tol=0.01), result
+@pytest.mark.parametrize(
+    ("value", "category"),
+    [
+        (15.0, "Severe Thinness"),
+        (16.5, "Moderate Thinness"),
+        (18.0, "Mild Thinness"),
+        (18.5, "Normal"),
+        (24.9, "Normal"),
+        (25.0, "Overweight"),
+        (30.0, "Obese Class I"),
+        (35.0, "Obese Class II"),
+        (40.0, "Obese Class III"),
+    ],
+)
+def test_adult_categories(value, category):
+    assert bmi.classify_adult_bmi(value) == category
 
 
-def test_bmi_child():
-    """20kg / (1.10m)^2 = 20 / 1.21 = 16.53."""
-    result = bmi.calculate_bmi(20, 1.10)
-    assert math.isclose(result, 16.53, abs_tol=0.01), result
+@pytest.mark.parametrize(("weight", "height"), [(0, 1.7), (-1, 1.7), (70, 0)])
+def test_bmi_rejects_invalid_anthropometrics(weight, height):
+    with pytest.raises(ValueError):
+        bmi.calculate_bmi(weight, height)
 
 
-def test_bmi_invalid_height():
-    try:
-        bmi.calculate_bmi(70, 0)
-        assert False, "expected ValueError"
-    except ValueError:
-        pass
+def test_percentile_conversions():
+    assert math.isclose(bmi.zscore_to_percentile(0), 50.0, abs_tol=0.01)
+    for percentile in (5, 25, 50, 75, 95):
+        z = bmi.percentile_to_zscore(percentile)
+        assert math.isclose(
+            bmi.zscore_to_percentile(z), percentile, abs_tol=0.5
+        )
 
 
-def test_bmi_invalid_weight():
-    try:
-        bmi.calculate_bmi(0, 1.70)
-        assert False, "expected ValueError"
-    except ValueError:
-        pass
+def test_official_who_2007_medians_give_zero_z():
+    assert abs(bmi.bmi_zscore_child(16.4433, 120, "M")) < 1e-10
+    assert abs(bmi.bmi_zscore_child(16.6133, 120, "F")) < 1e-10
 
 
-# ---------------------------------------------------------------------------
-# WHO Adult BMI Classification
-# ---------------------------------------------------------------------------
-
-def test_adult_underweight_severe():
-    assert bmi.classify_adult_bmi(15.0) == "Severe Thinness"
-
-
-def test_adult_underweight_moderate():
-    assert bmi.classify_adult_bmi(16.5) == "Moderate Thinness"
+def test_official_who_2006_day_level_median_gives_zero_z():
+    ref = reference_for_age(365 / (365.25 / 12), "M", age_days=365)
+    assert abs(
+        bmi.bmi_zscore_child(ref.M, ref.age_months, "M", age_days=365)
+    ) < 1e-10
 
 
-def test_adult_underweight_mild():
-    assert bmi.classify_adult_bmi(18.0) == "Mild Thinness"
-
-
-def test_adult_normal():
-    assert bmi.classify_adult_bmi(22.0) == "Normal"
-    assert bmi.classify_adult_bmi(18.5) == "Normal"
-    assert bmi.classify_adult_bmi(24.9) == "Normal"
-
-
-def test_adult_overweight():
-    assert bmi.classify_adult_bmi(27.0) == "Overweight"
-    assert bmi.classify_adult_bmi(25.0) == "Overweight"
-
-
-def test_adult_obese_i():
-    assert bmi.classify_adult_bmi(32.0) == "Obese Class I"
-    assert bmi.classify_adult_bmi(30.0) == "Obese Class I"
-
-
-def test_adult_obese_ii():
-    assert bmi.classify_adult_bmi(37.0) == "Obese Class II"
-    assert bmi.classify_adult_bmi(35.0) == "Obese Class II"
-
-
-def test_adult_obese_iii():
-    assert bmi.classify_adult_bmi(42.0) == "Obese Class III"
-    assert bmi.classify_adult_bmi(40.0) == "Obese Class III"
-
-
-# ---------------------------------------------------------------------------
-# Z-score / Percentile conversion
-# ---------------------------------------------------------------------------
-
-def test_zscore_to_percentile_50():
-    """Z=0 should give 50th percentile."""
-    result = bmi.zscore_to_percentile(0.0)
-    assert math.isclose(result, 50.0, abs_tol=0.1), result
-
-
-def test_zscore_to_percentile_97_7():
-    """Z=2 should give ~97.7th percentile."""
-    result = bmi.zscore_to_percentile(2.0)
-    assert math.isclose(result, 97.72, abs_tol=0.1), result
-
-
-def test_zscore_to_percentile_2_3():
-    """Z=-2 should give ~2.3rd percentile."""
-    result = bmi.zscore_to_percentile(-2.0)
-    assert math.isclose(result, 2.28, abs_tol=0.1), result
-
-
-def test_percentile_to_zscore_roundtrip():
-    """Converting percentile->zscore->percentile should roundtrip."""
-    for pct in [5, 25, 50, 75, 95]:
-        z = bmi.percentile_to_zscore(pct)
-        back = bmi.zscore_to_percentile(z)
-        assert math.isclose(back, pct, abs_tol=0.5), (pct, z, back)
-
-
-def test_percentile_to_zscore_50():
-    """50th percentile should give Z=0."""
-    result = bmi.percentile_to_zscore(50.0)
-    assert math.isclose(result, 0.0, abs_tol=0.01), result
-
-
-# ---------------------------------------------------------------------------
-# Child Z-score (LMS method)
-# ---------------------------------------------------------------------------
-
-def test_child_zscore_male_5y_normal():
-    """5-year-old male, BMI ~15.3 (M value at 60mo) -> Z ≈ 0."""
-    result = bmi.bmi_zscore_child(15.3, 60, "M")
-    assert abs(result) < 0.5, result
-
-
-def test_child_zscore_female_5y_normal():
-    """5-year-old female, BMI ~15.2 (M value at 60mo) -> Z ≈ 0."""
-    result = bmi.bmi_zscore_child(15.2, 60, "F")
-    assert abs(result) < 0.5, result
-
-
-def test_child_zscore_high_bmi():
-    """High BMI should give positive Z-score."""
-    result = bmi.bmi_zscore_child(20.0, 60, "M")
-    assert result > 1.0, result
-
-
-def test_child_zscore_low_bmi():
-    """Low BMI should give negative Z-score."""
-    result = bmi.bmi_zscore_child(12.0, 60, "M")
-    assert result < -1.0, result
-
-
-def test_child_zscore_invalid_sex():
-    try:
-        bmi.bmi_zscore_child(15.0, 60, "X")
-        assert False, "expected ValueError"
-    except ValueError:
-        pass
-
-
-def test_child_classification_wasting():
-    assert bmi.classify_child_zscore(-2.5) == "Wasting"
-
-
-def test_child_classification_normal():
-    assert bmi.classify_child_zscore(0.0) == "Normal"
-
-
-def test_child_classification_overweight():
-    assert bmi.classify_child_zscore(1.5) == "Overweight risk"
-
-
-def test_child_classification_obese():
-    assert bmi.classify_child_zscore(2.5) == "Overweight/Obese"
-
-
-# ---------------------------------------------------------------------------
-# Patient workflow
-# ---------------------------------------------------------------------------
-
-def test_calculate_patient_adult():
-    result = bmi.calculate_patient("P1", 70, 1.75)
-    assert result.bmi is not None
-    assert result.adult_category == "Normal"
-    assert result.is_child is False
-
-
-def test_calculate_patient_child():
-    result = bmi.calculate_patient("P2", 20, 1.10, age_months=60, sex="M")
-    assert result.bmi is not None
+def test_reference_range_includes_228_but_not_229_months():
+    result = bmi.calculate_patient(
+        "edge", 70, 1.75, age_months=228, sex="M"
+    )
     assert result.is_child is True
     assert result.z_score is not None
-    assert result.percentile is not None
-    assert result.child_category is not None
+
+    with pytest.raises(ValueError):
+        bmi.bmi_zscore_child(22.0, 229, "M")
 
 
-def test_calculate_patient_adult_obese():
-    result = bmi.calculate_patient("P3", 120, 1.70)
-    assert result.adult_category in ("Obese Class I", "Obese Class II", "Obese Class III")
+@pytest.mark.parametrize(
+    ("z", "age", "category"),
+    [
+        (-3.1, 120, "Severe thinness"),
+        (-2.5, 120, "Thinness"),
+        (0.0, 120, "Normal"),
+        (1.5, 120, "Overweight"),
+        (2.5, 120, "Obesity"),
+        (-3.1, 36, "Very low BMI-for-age"),
+        (-2.5, 36, "Low BMI-for-age"),
+        (1.5, 36, "Risk of overweight"),
+        (2.5, 36, "Overweight"),
+        (3.5, 36, "Obesity"),
+    ],
+)
+def test_age_specific_pediatric_classification(z, age, category):
+    assert bmi.classify_child_zscore(z, age) == category
 
 
-# ---------------------------------------------------------------------------
-# CSV batch processing
-# ---------------------------------------------------------------------------
+def test_child_without_sex_does_not_fall_back_to_adult_classification():
+    result = bmi.calculate_patient("P", 20, 1.10, age_months=60)
+    assert result.is_child is True
+    assert result.adult_category is None
+    assert result.z_score is None
+    assert any("Sex is required" in warning for warning in result.warnings)
 
-def test_batch_csv():
+
+def test_adult_result_has_no_pseudo_zscore():
+    result = bmi.calculate_patient("A", 70, 1.75)
+    assert result.is_child is False
+    assert result.adult_category == "Normal"
+    assert result.z_score is None
+    assert result.percentile is None
+
+
+def test_under_five_month_only_age_warns_about_day_approximation():
+    result = bmi.calculate_patient("C", 16.5, 0.96, age_months=36, sex="M")
+    assert result.z_score is not None
+    assert any("day-level" in warning for warning in result.warnings)
+
+
+def test_negative_age_is_rejected_without_adult_fallback():
+    result = bmi.calculate_patient("bad-age", 70, 1.75, age_months=-1, sex="M")
+    assert result.adult_category is None
+    assert result.z_score is None
+    assert result.warnings
+
+
+def test_exact_age_days_override_materially_inconsistent_under_five_months():
+    result = bmi.calculate_patient(
+        "exact-age",
+        9.6,
+        0.76,
+        age_months=24,
+        age_days=365,
+        sex="M",
+    )
+    assert math.isclose(result.age_months, 365 / (365.25 / 12), abs_tol=1e-12)
+    assert any("exact age_days was used" in warning for warning in result.warnings)
+
+
+def test_batch_csv_standard_format():
     with tempfile.TemporaryDirectory() as tmp:
-        inp = os.path.join(tmp, "in.csv")
-        out = os.path.join(tmp, "out.csv")
-        with open(inp, "w", newline="") as f:
-            f.write("patient_id,weight_kg,height_m,age_months,sex\n")
-            f.write("A1,70,1.75,,\n")
-            f.write("A2,20,1.10,60,M\n")
-        results = bmi.process_csv(inp, out)
+        source = os.path.join(tmp, "in.csv")
+        target = os.path.join(tmp, "out.csv")
+        with open(source, "w", newline="", encoding="utf-8") as handle:
+            handle.write("patient_id,weight_kg,height_m,age_months,sex\n")
+            handle.write("A1,70,1.75,,\n")
+            handle.write("A2,20,1.10,60,M\n")
+        results = bmi.process_csv(source, target)
         assert len(results) == 2
-        assert results[0].adult_category is not None
+        assert results[0].adult_category == "Normal"
         assert results[1].child_category is not None
-        assert os.path.exists(out)
+        with open(target, newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        assert len(rows) == 2
+        assert rows[1]["z_score"]
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-def test_cli_single_adult():
-    rc = bmi.main(["single", "--weight", "70", "--height", "1.75"])
-    assert rc == 0
-
-
-def test_cli_single_child():
-    rc = bmi.main(["single", "--weight", "20", "--height", "1.10", "--age-months", "60", "--sex", "M"])
-    assert rc == 0
-
-
-def test_cli_batch():
+def test_batch_csv_uses_exact_age_days_when_available():
     with tempfile.TemporaryDirectory() as tmp:
-        inp = os.path.join(tmp, "in.csv")
-        out = os.path.join(tmp, "out.csv")
-        with open(inp, "w", newline="") as f:
-            f.write("patient_id,weight_kg,height_m,age_months,sex\n")
-            f.write("T1,70,1.75,,\n")
-        rc = bmi.main(["batch", "--input", inp, "--output", out])
-        assert rc == 0
-        assert os.path.exists(out)
+        source = os.path.join(tmp, "in.csv")
+        target = os.path.join(tmp, "out.csv")
+        with open(source, "w", newline="", encoding="utf-8") as handle:
+            handle.write("patient_id,age_days,sex,height_cm,weight_kg\n")
+            handle.write("P1,365,M,76,9.6\n")
+        results = bmi.process_csv(source, target)
+        assert results[0].age_days == 365
+        assert not any("approximated" in item for item in results[0].warnings)
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
-def run_all():
-    tests = [obj for name, obj in globals().items() if name.startswith("test_") and callable(obj)]
-    passed = 0
-    failed = 0
-    for t in tests:
-        try:
-            t()
-            passed += 1
-            print(f"  PASS: {t.__name__}")
-        except Exception as e:
-            failed += 1
-            print(f"  FAIL: {t.__name__} -- {e}")
-    print(f"\n{passed}/{passed + failed} tests passed.")
-    return failed
-
-
-if __name__ == "__main__":
-    import sys
-    sys.exit(run_all())
+def test_cli_single_and_batch():
+    assert (
+        bmi.main(
+            [
+                "single",
+                "--weight",
+                "20",
+                "--height",
+                "1.10",
+                "--age-months",
+                "60",
+                "--sex",
+                "M",
+            ]
+        )
+        == 0
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        source = os.path.join(tmp, "in.csv")
+        target = os.path.join(tmp, "out.csv")
+        with open(source, "w", encoding="utf-8") as handle:
+            handle.write("patient_id,weight_kg,height_m\nA,70,1.75\n")
+        assert bmi.main(["batch", "-i", source, "-o", target]) == 0
+        assert os.path.exists(target)
