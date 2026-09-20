@@ -1,5 +1,7 @@
 # Pediatric BMI Z-Score WHO Calculator
 
+### [Open the Live Application →](https://abusuraihsakhri.github.io/bmi-zscore-who-calculator/)
+
 [![CI](https://github.com/abusuraihsakhri/bmi-zscore-who-calculator/actions/workflows/ci.yml/badge.svg)](https://github.com/abusuraihsakhri/bmi-zscore-who-calculator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
