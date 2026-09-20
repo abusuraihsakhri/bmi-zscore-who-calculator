@@ -239,15 +239,19 @@ function analyze(event) {
     if (height <= 0) throw new Error("Height or length must be greater than zero.");
     if (Number.isFinite(ageDays) && (ageDays < 0 || ageDays > 1826)) throw new Error("Exact age in days must be between 0 and 1826.");
     if (ageMonths >= 60 && Number.isFinite(ageDays)) throw new Error("Exact age in days is only used for children under 60 months.");
+    if (Number.isFinite(ageDays) && Math.abs(ageMonths - ageDays / DAYS_PER_MONTH) > 0.55) {
+      throw new Error("Age in months and exact age in days do not agree. Correct one of the age fields.");
+    }
 
+    var effectiveAgeMonths = Number.isFinite(ageDays) ? ageDays / DAYS_PER_MONTH : ageMonths;
     var bmi = weight / Math.pow(height / 100, 2);
-    var ref = referenceForAge(ageMonths, sex, ageDays);
+    var ref = referenceForAge(effectiveAgeMonths, sex, ageDays);
     var z = adjustedZ(bmi, ref);
     var result = {
       bmi: bmi,
       z: z,
       percentile: percentile(z),
-      category: classify(z, ageMonths),
+      category: classify(z, effectiveAgeMonths),
       ref: ref
     };
     renderResult(result);
