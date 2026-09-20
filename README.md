@@ -1,162 +1,182 @@
 # Pediatric BMI Z-Score WHO Calculator
 
+[![CI](https://github.com/abusuraihsakhri/bmi-zscore-who-calculator/actions/workflows/ci.yml/badge.svg)](https://github.com/abusuraihsakhri/bmi-zscore-who-calculator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![Build Status](https://img.shields.io/badge/CI-Passing-brightgreen.svg)
-![Standards](https://img.shields.io/badge/WHO-Child%20Growth%20Standards%202006%20%2F%202007-blue.svg)
 
-A clinical and epidemiological toolkit for calculating Body Mass Index (BMI), sex- and age-specific BMI-for-age Z-scores, percentiles, and nutritional classifications based on the **World Health Organization (WHO) Child Growth Standards (0–5 years / 0–60 months)** and **WHO Growth Reference (5–19 years / 61–228 months)**.
+A dependency-free BMI calculator for WHO pediatric BMI-for-age z-scores and
+adult BMI categories. Pediatric calculations use the WHO Child Growth
+Standards 2006 reference below 60 months and the WHO Growth Reference 2007
+from 60 to less than 229 months.
 
----
+The repository provides a Python CLI/API, CSV batch processing, a small FHIR
+R4 integration helper, and a static browser calculator suitable for GitHub
+Pages.
 
-## 📐 Pediatric Anthropometric Formulations (LMS Method)
+## What it calculates
 
-The calculation of BMI-for-age Z-scores employs the **Cole & Green (1992)** LMS technique adopted by the World Health Organization (WHO Child Growth Standards 2006 & WHO Reference 2007).
+For pediatric BMI-for-age, the project uses the LMS/Box-Cox transformation:
 
-### 1. BMI Formulation
+z = ((BMI / M)^L - 1) / (L × S)
 
-$$\text{BMI} = \frac{\text{weight (kg)}}{(\text{height or length in meters})^2}$$
+When the unadjusted score is above +3 SD or below -3 SD, the implementation
+uses the WHO adjusted extrapolation based on the distance between the 2-SD and
+3-SD curves.
 
-### 2. LMS Transformation
+Reference resolution:
 
-The LMS methodology summarizes growth references into three age- and sex-dependent smoothed parameters:
-- **$L$ (Lambda)**: Box-Cox power transformation parameter accounting for skewness in the distribution.
-- **$M$ (Mu)**: Median BMI value at the reference age and sex.
-- **$S$ (Sigma)**: Generalized coefficient of variation indicating dispersion.
+- **Birth to <60 months:** day-level WHO Child Growth Standards 2006 data.
+  If only age in months is supplied, the nearest day is derived using
+  365.25/12 days per month. Exact age in days is preferred.
+- **60 to <229 months:** monthly WHO Growth Reference 2007 data, with linear
+  interpolation for fractional months as used by WHO AnthroPlus.
+- **Post-reference/adult inputs:** BMI is classified by adult BMI thresholds;
+  no fabricated adult z-score or percentile is produced.
 
-The BMI-for-age Z-score ($Z$) is computed using:
+Pediatric category labels follow age-specific WHO z-score cut-offs. The
+under-5 low-BMI labels in this project are deliberately descriptive
+("Low BMI-for-age" and "Very low BMI-for-age") rather than treating BMI alone
+as a diagnosis of wasting.
 
-$$Z = \frac{(\text{BMI} / M)^L - 1}{L \cdot S} \quad \text{when } L \neq 0$$
+## Browser application
 
-$$Z = \frac{\ln(\text{BMI} / M)}{S} \quad \text{when } L = 0$$
+The static application is in the web directory. It runs entirely in the
+browser, loads the same WHO reference tables used by Python, and requires no
+server-side Python or external API.
 
-### 3. Percentile Calculation
+Features:
 
-Percentiles are derived from the standard normal cumulative distribution function $\Phi(Z)$:
+- Light theme by default with a dark-theme toggle.
+- Compact responsive layout with a visible **Analyze** action.
+- BMI, z-score, percentile, category, LMS parameters, reference age, and
+  reference standard in one result view.
+- No patient inputs are transmitted. Only the theme preference is stored in
+  browser local storage.
+- No external fonts, scripts, analytics, or third-party network calls.
 
-$$\text{Percentile} = \Phi(Z) \times 100 = \frac{1}{2} \left[1 + \text{erf}\left(\frac{Z}{\sqrt{2}}\right)\right] \times 100$$
+GitHub Pages deployment is handled by .github/workflows/pages.yml from the
+master branch.
 
----
+## CLI
 
-## 📊 WHO Cutoffs & Nutritional Classifications
+Single calculation:
 
-Nutritional status interpretation differs across developmental age groups in accordance with WHO clinical guidelines:
+~~~bash
+python cli.py single \
+  --weight 32.23 \
+  --height 1.40 \
+  --age-months 120 \
+  --sex M
+~~~
 
-### Children 0–5 Years (0–60 Months) — WHO Child Growth Standards (2006)
+For a child under 5, exact age in days can be supplied:
 
-| Z-Score Range | Nutritional Classification | Clinical Interpretation |
-| :--- | :--- | :--- |
-| $Z < -3\,\text{SD}$ | **Severe wasting** | Severe acute malnutrition; requires immediate clinical care |
-| $-3\,\text{SD} \le Z < -2\,\text{SD}$ | **Wasted** | Moderate acute malnutrition |
-| $-2\,\text{SD} \le Z \le +1\,\text{SD}$ | **Normal** | Adequate nutritional status |
-| $+1\,\text{SD} < Z \le +2\,\text{SD}$ | **Risk of overweight** | Potential for pediatric excess adiposity |
-| $+2\,\text{SD} < Z \le +3\,\text{SD}$ | **Overweight** | Elevated risk of childhood obesity |
-| $Z > +3\,\text{SD}$ | **Obese** | Extreme excess adiposity |
+~~~bash
+python cli.py single \
+  --weight 9.6 \
+  --height 0.76 \
+  --age-months 12 \
+  --age-days 365 \
+  --sex M
+~~~
 
-### Children 5–19 Years (61–228 Months) — WHO Growth Reference (2007)
+Batch CSV processing:
 
-| Z-Score Range | Classification | Clinical Interpretation |
-| :--- | :--- | :--- |
-| $Z < -3\,\text{SD}$ | **Severe thinness** | Severe undernutrition |
-| $-3\,\text{SD} \le Z < -2\,\text{SD}$ | **Thinness** | Moderate undernutrition |
-| $-2\,\text{SD} \le Z \le +1\,\text{SD}$ | **Normal** | Healthy weight range |
-| $+1\,\text{SD} < Z \le +2\,\text{SD}$ | **Overweight** | Equivalent to adult BMI $\ge 25\,\text{kg/m}^2$ at 19 years |
-| $Z > +2\,\text{SD}$ | **Obese** | Equivalent to adult BMI $\ge 30\,\text{kg/m}^2$ at 19 years |
-
----
-
-## 💻 CLI Quickstart & Usage
-
-The application provides a zero-dependency CLI (`cli.py` / `bmi_zscore.py`) using Python standard library:
-
-### 1. Single Patient Assessment
-
-```bash
-# Evaluate a 5-year-old boy (60 months)
-python cli.py single --id PAT-001 --weight 18.5 --height 1.10 --age-months 60 --sex M
-
-# Output:
-# Patient: PAT-001
-#   Weight: 18.5 kg  Height: 1.10 m
-#   Age: 60 months (5.0 years)
-#   Sex: M
-#   BMI: 15.29 kg/m²
-#   Z-score: -0.01
-#   Percentile: 49.6%
-#   WHO Category: Normal
-```
-
-### 2. Batch CSV Processing
-
-Process multi-patient cohorts with automatic column harmonization (supporting `height_m`, `height_cm`, `weight_kg`, `age_months`, and `age_days`):
-
-```bash
+~~~bash
 python cli.py batch -i sample.csv -o results.csv
-```
+~~~
 
-Example input (`sample.csv`):
-```csv
-patient_id,age_months,age_days,sex,height_cm,weight_kg,bmi,l_param,m_param,s_param,z_score,percentile,nutritional_classification
-P001,36,1095,male,96.0,9.8,10.63,-1.10,15.40,0.0780,-5.87,0.0,severe wasting (<-3SD)
-P002,24,730,female,86.0,9.7,13.12,-0.90,15.40,0.0810,-2.13,1.7,wasted (<-2SD)
-P003,12,365,male,76.0,9.6,16.62,-0.80,16.40,0.0820,0.16,56.4,normal (-2SD to +1SD)
-P006,60,1826,female,110.0,23.0,19.01,-1.20,15.20,0.0830,2.36,99.1,overweight (>+2SD)
-P007,48,1461,male,103.0,23.0,21.68,-1.20,15.30,0.0790,3.61,100.0,obese (>+3SD)
-```
+Accepted height columns include height_m, height_cm, length_cm, and height.
+Accepted age columns include age_months and age_days.
 
----
+## Python API
 
-## 🐍 Python Quickstart
-
-Use `bmi_zscore` programmatically in Python applications or data science pipelines:
-
-```python
+~~~python
 import bmi_zscore as bmi
 
-# 1. Calculate BMI
-weight_kg = 16.5
-height_m = 0.96
-bmi_val = bmi.calculate_bmi(weight_kg, height_m)
-print(f"BMI: {bmi_val:.2f} kg/m²")  # 17.90 kg/m²
-
-# 2. Compute WHO LMS Z-score for a 36-month-old boy
-z = bmi.bmi_zscore_child(bmi=bmi_val, age_months=36.0, sex="M")
-percentile = bmi.zscore_to_percentile(z)
-category = bmi.classify_child_zscore(z)
-
-print(f"Z-Score: {z:+.2f}")        # +1.78
-print(f"Percentile: {percentile:.1f}%") # 96.2%
-print(f"Category: {category}")    # Overweight risk
-
-# 3. Patient Level Evaluation
 result = bmi.calculate_patient(
-    patient_id="PAT-PEDIATRIC-1",
-    weight_kg=23.0,
-    height_m=1.10,
-    age_months=60.0,
-    sex="F"
+    patient_id="example",
+    weight_kg=32.23,
+    height_m=1.40,
+    age_months=120,
+    sex="M",
 )
-print(f"Z: {result.z_score}, Category: {result.child_category}")
-```
 
----
+print(result.bmi)
+print(result.z_score)
+print(result.percentile)
+print(result.child_category)
+print(result.reference_standard)
+~~~
 
-## 🧪 Testing & Verification
+## FHIR helper
 
-Run the comprehensive test suite with pytest:
+fhir_bmi_integration.py can extract height and weight from FHIR R4
+Observations using LOINC 8302-2 and 29463-7, calculate BMI-for-age, and produce
+a derived BMI Observation. Patient.birthDate and a supported Patient.gender
+value are required.
 
-```bash
+When Observation resources contain effectiveDateTime, the latest supplied
+observation date is used as the age reference date. This keeps calculations
+reproducible instead of silently using the current date.
+
+## Local development
+
+Runtime code uses only the Python standard library. Tests require pytest.
+
+~~~bash
+python -m pip install pytest
 python -m pytest -p no:zarr -v
-```
-
-Execute CLI batch smoke verification:
-
-```bash
 python cli.py batch -i sample.csv -o out_smoke.csv
-```
+python simulator.py 100 --seed 7
+~~~
 
----
+Build and serve the browser application:
 
-## 📜 License
+~~~bash
+python scripts/build_site.py
+python -m http.server 8000 --directory _site
+~~~
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Then open http://localhost:8000/.
+
+The web application targets current versions of Chrome, Edge, Firefox, and
+Safari and uses standard HTML, CSS, and JavaScript without a framework.
+
+## Validation and limitations
+
+The automated tests check exact anchors from the WHO source tables,
+fractional-month interpolation, adjusted LMS behavior, age boundaries, CSV and
+CLI workflows, FHIR behavior, auxiliary helper regressions, and the static
+site build.
+
+Important limitations:
+
+- BMI-for-age is a reference calculation and not a diagnosis or treatment
+  recommendation.
+- For children under 5, exact age in days is more precise than a month-only
+  approximation.
+- The calculator does not infer or correct recumbent-length versus standing-
+  height measurement technique. Supply anthropometry collected according to
+  the relevant WHO procedure.
+- Oedema handling from WHO Anthro/AnthroPlus is not implemented in the simple
+  calculator interface; weight-related z-scores should not be interpreted as
+  equivalent to a full WHO Anthro assessment when oedema is present.
+- The experimental workflow helpers in alert_escalation.py,
+  longitudinal_growth.py, and patient_stratification.py are explicitly
+  heuristic and are not validated clinical risk models.
+
+## Reference data
+
+The bundled WHO data are sourced from the WHO-maintained repositories:
+
+- https://github.com/WorldHealthOrganization/anthro
+- https://github.com/WorldHealthOrganization/anthroplus
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for data provenance and
+third-party rights information.
+
+## License
+
+Project code is licensed under the MIT License; see [LICENSE](LICENSE).
+Third-party WHO reference material is identified separately in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
