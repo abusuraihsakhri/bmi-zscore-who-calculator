@@ -1,0 +1,32 @@
+name: Publish audited release
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - RELEASE_NOTES.md
+      - .github/workflows/release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Publish v2026.09.21
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v2026.09.21"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; leaving it unchanged."
+          else
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --title "$tag" \
+              --notes-file RELEASE_NOTES.md
+          fi
