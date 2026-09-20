@@ -2,9 +2,12 @@ name: BMI Z-Score WHO Calculator CI
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
+
+permissions:
+  contents: read
 
 jobs:
   test-and-verify:
@@ -14,24 +17,49 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest
+      - name: Install test dependency
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
 
-    - name: Run Pytest Suite
-      run: |
-        python -m pytest -p no:zarr -v
+      - name: Compile Python
+        run: python -m compileall -q .
 
-    - name: CLI Batch Smoke Test
-      run: |
-        python cli.py batch -i sample.csv -o out_smoke.csv
-        test -s out_smoke.csv
-        rm -f out_smoke.csv
+      - name: Run tests
+        run: python -m pytest -p no:zarr -v
+
+      - name: CLI batch smoke test
+        run: |
+          python cli.py batch -i sample.csv -o out_smoke.csv
+          test -s out_smoke.csv
+          rm -f out_smoke.csv
+
+      - name: Simulator smoke test
+        run: python simulator.py 20 --seed 7
+
+      - name: Browser JavaScript syntax check
+        run: node --check web/app.js
+
+      - name: Static site build
+        run: |
+          python scripts/build_site.py
+          test -s _site/index.html
+          test -s _site/styles.css
+          test -s _site/app.js
+          test -s _site/data/who_bmi_0_5.tsv
+          test -s _site/data/who_bmi_5_19.tsv
+
+      - name: Basic secret pattern scan
+        shell: bash
+        run: |
+          if grep -RInE --exclude-dir=.git --exclude='*.tsv'             '(gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)' .; then
+            echo "Potential credential pattern detected."
+            exit 1
+          fi
