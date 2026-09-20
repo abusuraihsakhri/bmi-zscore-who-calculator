@@ -109,24 +109,30 @@ def reference_for_age(
     sx = normalize_sex(sex)
     code = _sex_code(sx)
 
-    if age_months is None:
-        if age_days is None:
-            raise ValueError("age_months or age_days is required")
+    exact_day: Optional[int] = None
+    if age_days is not None:
         if not math.isfinite(float(age_days)) or float(age_days) < 0:
             raise ValueError("age_days must be a finite non-negative number")
-        age_months = float(age_days) / DAYS_PER_MONTH
+        exact_day = _round_half_up(float(age_days))
+        age_from_days = float(age_days) / DAYS_PER_MONTH
+        if age_from_days < WHO_2006_MAX_MONTHS:
+            age_months = age_from_days
+        elif age_months is None:
+            age_months = age_from_days
+
+    if age_months is None:
+        raise ValueError("age_months or age_days is required")
 
     age_months = float(age_months)
     if not math.isfinite(age_months) or age_months < 0:
         raise ValueError("age_months must be a finite non-negative number")
 
     if age_months < WHO_2006_MAX_MONTHS:
-        if age_days is None:
-            day = _round_half_up(age_months * DAYS_PER_MONTH)
-        else:
-            if not math.isfinite(float(age_days)) or float(age_days) < 0:
-                raise ValueError("age_days must be a finite non-negative number")
-            day = _round_half_up(float(age_days))
+        day = (
+            exact_day
+            if exact_day is not None
+            else _round_half_up(age_months * DAYS_PER_MONTH)
+        )
 
         table = _load_who_2006()
         key = (code, day)
