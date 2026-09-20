@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'">
+  <meta name="description" content="WHO BMI-for-age z-score calculator using WHO 2006 and 2007 reference data.">
+  <title>WHO BMI-for-Age Calculator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">WHO reference calculator</p>
+        <h1>BMI-for-Age Z-Score</h1>
+      </div>
+      <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch color theme">Dark</button>
+    </header>
+
+    <main class="workspace">
+      <section class="card input-card" aria-labelledby="input-title">
+        <div class="section-head">
+          <div>
+            <h2 id="input-title">Measurements</h2>
+            <p>Birth to 19 years using sex-specific WHO references.</p>
+          </div>
+          <span id="data-status" class="status-chip" role="status">Loading reference data…</span>
+        </div>
+
+        <form id="calculator-form" novalidate>
+          <div class="field-grid">
+            <label class="field">
+              <span>Age (months)</span>
+              <input id="age-months" name="age-months" type="number" min="0" max="228.99" step="0.01" value="120" inputmode="decimal" required>
+            </label>
+            <label class="field">
+              <span>Sex</span>
+              <select id="sex" name="sex" required>
+                <option value="M">Male</option>
+                <option value="F">Female</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Weight (kg)</span>
+              <input id="weight" name="weight" type="number" min="0.1" step="0.01" value="31" inputmode="decimal" required>
+            </label>
+            <label class="field">
+              <span>Height / length (cm)</span>
+              <input id="height" name="height" type="number" min="20" step="0.1" value="140" inputmode="decimal" required>
+            </label>
+          </div>
+
+          <label class="field optional-field">
+            <span>Exact age in days <small>optional for under-5s</small></span>
+            <input id="age-days" name="age-days" type="number" min="0" max="1826" step="1" inputmode="numeric" placeholder="Uses month-derived day if blank">
+          </label>
+
+          <p id="form-error" class="error" role="alert" hidden></p>
+
+          <div class="actions">
+            <button id="analyze-button" class="primary-button" type="submit" disabled>Analyze</button>
+            <button id="reset-button" class="secondary-button" type="button">Reset</button>
+          </div>
+        </form>
+
+        <p class="microcopy">Exact day age improves under-5 precision. Inputs stay in your browser and are not uploaded.</p>
+      </section>
+
+      <section class="card results-card" aria-labelledby="result-title" aria-live="polite">
+        <div class="section-head">
+          <div>
+            <h2 id="result-title">Result</h2>
+            <p id="result-reference">Enter measurements and select Analyze.</p>
+          </div>
+          <span id="category-chip" class="category-chip neutral">Ready</span>
+        </div>
+
+        <div class="metrics">
+          <article class="metric">
+            <span>BMI</span>
+            <strong id="bmi-result">—</strong>
+            <small>kg/m²</small>
+          </article>
+          <article class="metric">
+            <span>Z-score</span>
+            <strong id="z-result">—</strong>
+            <small>SD</small>
+          </article>
+          <article class="metric">
+            <span>Percentile</span>
+            <strong id="percentile-result">—</strong>
+            <small>standard normal</small>
+          </article>
+        </div>
+
+        <div class="detail-grid">
+          <div>
+            <span class="detail-label">WHO category</span>
+            <strong id="category-result">—</strong>
+          </div>
+          <div>
+            <span class="detail-label">Reference age</span>
+            <strong id="reference-age">—</strong>
+          </div>
+          <div>
+            <span class="detail-label">L / M / S</span>
+            <strong id="lms-result">—</strong>
+          </div>
+          <div>
+            <span class="detail-label">Reference</span>
+            <strong id="standard-result">—</strong>
+          </div>
+        </div>
+
+        <div class="notice">
+          <strong>Interpretation note</strong>
+          <p>This calculator reports BMI-for-age against WHO growth references. It is a reference calculation, not a diagnosis or treatment recommendation.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>WHO Child Growth Standards 2006 · WHO Growth Reference 2007</span>
+      <a href="https://github.com/abusuraihsakhri/bmi-zscore-who-calculator">Source</a>
+    </footer>
+  </div>
+  <script src="app.js" defer></script>
+</body>
+</html>
