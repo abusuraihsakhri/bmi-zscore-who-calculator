@@ -119,6 +119,19 @@ def test_negative_age_is_rejected_without_adult_fallback():
     assert result.warnings
 
 
+def test_exact_age_days_override_materially_inconsistent_under_five_months():
+    result = bmi.calculate_patient(
+        "exact-age",
+        9.6,
+        0.76,
+        age_months=24,
+        age_days=365,
+        sex="M",
+    )
+    assert math.isclose(result.age_months, 365 / (365.25 / 12), abs_tol=1e-12)
+    assert any("exact age_days was used" in warning for warning in result.warnings)
+
+
 def test_batch_csv_standard_format():
     with tempfile.TemporaryDirectory() as tmp:
         source = os.path.join(tmp, "in.csv")
